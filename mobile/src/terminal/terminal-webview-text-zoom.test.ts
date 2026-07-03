@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { Script } from 'node:vm'
 import { describe, expect, it } from 'vitest'
+import { XTERM_HTML, XTERM_HTML_ANDROID } from './terminal-webview-html'
 
 const terminalWebViewSource = readFileSync(
   new URL('./TerminalWebView.tsx', import.meta.url),
@@ -10,12 +11,24 @@ const terminalHtmlSource = readFileSync(
   new URL('./terminal-webview-html.ts', import.meta.url),
   'utf8'
 )
+const terminalWebViewFrameSource = readFileSync(
+  new URL('./TerminalWebViewFrame.tsx', import.meta.url),
+  'utf8'
+)
+const terminalWebViewMessageHandlerSource = readFileSync(
+  new URL('./terminal-webview-message-handler.ts', import.meta.url),
+  'utf8'
+)
+const terminalWebViewSourceModuleSource = readFileSync(
+  new URL('./terminal-webview-source.ts', import.meta.url),
+  'utf8'
+)
 
 function extractStatusDotNormalizer() {
   const declarationStart = terminalHtmlSource.indexOf('  var CLAUDE_STATUS_DOT =')
   const declarationEnd = terminalHtmlSource.indexOf('  var PRIVATE_MODE_SCAN_TAIL_LIMIT')
   const functionStart = terminalHtmlSource.indexOf('  function isStatusDotPresentationSelector')
-  const functionEnd = terminalHtmlSource.indexOf('\n\n  function enqueueWrite', functionStart)
+  const functionEnd = terminalHtmlSource.indexOf('  function enqueueWrite', functionStart)
   expect(declarationStart).toBeGreaterThanOrEqual(0)
   expect(declarationEnd).toBeGreaterThan(declarationStart)
   expect(functionStart).toBeGreaterThan(declarationEnd)
@@ -42,15 +55,22 @@ describe('TerminalWebView text zoom', () => {
     expect(webViewProps).toContain('textZoom={100}')
   })
 
-  it('keeps the HTML source object stable so parent renders do not reload xterm', () => {
+  it('keeps platform HTML source objects stable so parent renders do not reload xterm', () => {
     const start = terminalWebViewSource.indexOf('<WebView')
     expect(start).toBeGreaterThanOrEqual(0)
     const end = terminalWebViewSource.indexOf('/>', start)
     expect(end).toBeGreaterThan(start)
     const webViewProps = terminalWebViewSource.slice(start, end)
-    expect(terminalWebViewSource).toContain('const XTERM_WEBVIEW_SOURCE = { html: XTERM_HTML }')
+    expect(terminalWebViewSourceModuleSource).toContain(
+      'const XTERM_DEFAULT_WEBVIEW_SOURCE = { html: XTERM_HTML }'
+    )
+    expect(terminalWebViewSourceModuleSource).toContain(
+      'const XTERM_ANDROID_WEBVIEW_SOURCE = { html: XTERM_HTML_ANDROID }'
+    )
+    expect(terminalWebViewSourceModuleSource).toContain("Platform.OS === 'android'")
     expect(webViewProps).toContain('source={XTERM_WEBVIEW_SOURCE}')
     expect(webViewProps).not.toContain('source={{ html: XTERM_HTML }}')
+    expect(webViewProps).not.toContain('source={{ html: XTERM_HTML_ANDROID }}')
   })
 
   it('forces the Claude status dot to text presentation before xterm writes', () => {
@@ -123,11 +143,56 @@ describe('TerminalWebView text zoom', () => {
     expect(replay).toBeGreaterThan(unicode)
   })
 
-  it('uses the newer WebGL-capable xterm stack and desktop font fallbacks', () => {
+  it('inlines xterm CSS so Android release rendering does not depend on a stylesheet request', () => {
+    expect(terminalHtmlSource).toContain('const XTERM_CSS = `')
+    expect(terminalHtmlSource).toContain('<style>${XTERM_CSS}</style>')
+    expect(XTERM_HTML_ANDROID).toContain('.xterm .xterm-screen canvas')
+    expect(XTERM_HTML_ANDROID).not.toContain('css/xterm.min.css')
+  })
+
+  it('reports WebView-side message and paint failures instead of swallowing them', () => {
+    expect(terminalHtmlSource).toContain('function notifyError(stage, error)')
+    expect(terminalHtmlSource).toContain("notifyError('terminal message failed', error)")
+    expect(terminalHtmlSource).toContain('function notifyPaintHealth(stage)')
+    expect(terminalHtmlSource).toContain("notifyPaintHealth('after-init-message')")
+    expect(terminalWebViewMessageHandlerSource).toContain("msg.type === 'paint-health'")
+    expect(terminalWebViewMessageHandlerSource).toContain("console.log('[terminal-webview][paint]', msg)")
+  })
+
+  it('loads the structuredClone polyfill before xterm for older Android WebViews', () => {
+    expect(terminalHtmlSource).toContain('const STRUCTURED_CLONE_POLYFILL_SCRIPT = `<script>')
+    expect(terminalHtmlSource).toContain("globalThis.structuredClone=function structuredClone(value)")
+    expect(XTERM_HTML_ANDROID.indexOf('function structuredClone(value)')).toBeGreaterThanOrEqual(0)
+    expect(XTERM_HTML_ANDROID.indexOf('function structuredClone(value)')).toBeLessThan(
+      XTERM_HTML_ANDROID.indexOf('@xterm/xterm@6.1.0-beta.285')
+    )
+  })
+
+  it('keeps default/iOS WebGL enabled and disables WebGL in Android HTML', () => {
     expect(terminalHtmlSource).toContain('@xterm/addon-webgl@0.20.0-beta.284')
+    expect(XTERM_HTML).toContain('@xterm/addon-webgl@0.20.0-beta.284')
+    expect(XTERM_HTML).toContain('new window.WebglAddon.WebglAddon()')
+    expect(XTERM_HTML_ANDROID).not.toContain('@xterm/addon-webgl@0.20.0-beta.284')
+    expect(XTERM_HTML_ANDROID).not.toContain('new window.WebglAddon.WebglAddon()')
+    expect(XTERM_HTML_ANDROID).toContain('@xterm/addon-unicode11@0.10.0-beta.285')
+  })
+
+  it('keeps desktop font fallbacks with the newer xterm stack', () => {
+    expect(XTERM_HTML).toContain('@xterm/xterm@6.1.0-beta.285')
     expect(terminalHtmlSource).toContain('"SF Mono", "Menlo", "Monaco", "Cascadia Mono"')
     expect(terminalHtmlSource).toContain("fontWeight: '300'")
     expect(terminalHtmlSource).toContain("fontWeightBold: '500'")
-    expect(terminalHtmlSource).toContain('new window.WebglAddon.WebglAddon()')
+  })
+
+  it('surfaces WebView error messages in a compact themed diagnostic', () => {
+    expect(terminalWebViewMessageHandlerSource).toContain("msg.type === 'error'")
+    expect(terminalWebViewMessageHandlerSource).toContain('setWebViewError(message)')
+    expect(terminalWebViewMessageHandlerSource).toContain(
+      "console.error('[terminal-webview]', message)"
+    )
+    expect(terminalWebViewFrameSource).toContain('Terminal WebView error: {webViewError}')
+    expect(terminalWebViewFrameSource).toContain('styles.diagnostic')
+    expect(terminalWebViewFrameSource).toContain('borderColor: colors.statusRed')
+    expect(terminalWebViewFrameSource).toContain('backgroundColor: colors.bgPanel')
   })
 })

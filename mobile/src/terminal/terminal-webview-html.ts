@@ -33,6 +33,28 @@ const DEFAULT_TERMINAL_THEME: RuntimeMobileTerminalTheme['theme'] = {
   brightWhite: '#c0caf5'
 }
 
+const XTERM_CSS = `.xterm{cursor:text;position:relative;user-select:none;-ms-user-select:none;-webkit-user-select:none}.xterm.focus,.xterm:focus{outline:0}.xterm .xterm-helpers{position:absolute;top:0;z-index:5}.xterm .xterm-helper-textarea{padding:0;border:0;margin:0;position:absolute;opacity:0;left:-9999em;top:0;width:0;height:0;z-index:-5;white-space:nowrap;overflow:hidden;resize:none}.xterm .composition-view{background:#000;color:#fff;display:none;position:absolute;white-space:nowrap;z-index:1}.xterm .composition-view.active{display:block}.xterm .xterm-viewport{overflow-y:scroll;cursor:default;position:absolute;right:0;left:0;top:0;bottom:0}.xterm:not(.allow-transparency) .xterm-viewport{background-color:#000}.xterm .xterm-screen{position:relative}.xterm .xterm-screen canvas{position:absolute;left:0;top:0}.xterm.enable-mouse-events{cursor:default}.xterm .xterm-cursor-pointer,.xterm.xterm-cursor-pointer{cursor:pointer}.xterm.column-select.focus{cursor:crosshair}.xterm .xterm-accessibility:not(.debug),.xterm .xterm-message{position:absolute;left:0;top:0;bottom:0;right:0;z-index:10;color:transparent;pointer-events:none}.xterm .xterm-accessibility-tree:not(.debug) ::selection{color:transparent}.xterm .xterm-accessibility-tree{font-family:monospace;user-select:text;white-space:pre}.xterm .xterm-accessibility-tree>div{transform-origin:left;width:fit-content}.xterm .live-region{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}.xterm-dim{opacity:1!important}.xterm-underline-1{text-decoration:underline}.xterm-underline-2{text-decoration:double underline}.xterm-underline-3{text-decoration:wavy underline}.xterm-underline-4{text-decoration:dotted underline}.xterm-underline-5{text-decoration:dashed underline}.xterm-overline{text-decoration:overline}.xterm-overline.xterm-underline-1{text-decoration:overline underline}.xterm-overline.xterm-underline-2{text-decoration:overline double underline}.xterm-overline.xterm-underline-3{text-decoration:overline wavy underline}.xterm-overline.xterm-underline-4{text-decoration:overline dotted underline}.xterm-overline.xterm-underline-5{text-decoration:overline dashed underline}.xterm-strikethrough{text-decoration:line-through}.xterm-screen .xterm-decoration-container .xterm-decoration{z-index:6;position:absolute}.xterm-screen .xterm-decoration-container .xterm-decoration.xterm-decoration-top-layer{z-index:7}.xterm-decoration-overview-ruler{z-index:8;position:absolute;top:0;right:0;pointer-events:none}.xterm-decoration-top{z-index:2;position:relative}.xterm .xterm-scrollable-element>.xterm-scrollbar{cursor:default}.xterm .xterm-scrollable-element>.xterm-scrollbar>.xterm-scra{cursor:pointer;background-color:var(--vscode-scrollbarSliderBackground,rgba(100,100,100,.4));mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 11'><path d='M2.5 8.5 L5.5 2.5 L8.5 8.5 Z' fill='black'/></svg>");-webkit-mask-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 11'><path d='M2.5 8.5 L5.5 2.5 L8.5 8.5 Z' fill='black'/></svg>");mask-repeat:no-repeat;-webkit-mask-repeat:no-repeat;mask-position:center center;-webkit-mask-position:center center;mask-size:100% 100%;-webkit-mask-size:100% 100%}.xterm .xterm-scrollable-element>.xterm-scrollbar>.xterm-scra.xterm-arrow-down{transform:rotate(180deg)}.xterm .xterm-scrollable-element>.xterm-visible{opacity:1;background:rgba(0,0,0,0);transition:opacity .1s linear;z-index:11}.xterm .xterm-scrollable-element>.xterm-invisible{opacity:0;pointer-events:none}.xterm .xterm-scrollable-element>.xterm-invisible.xterm-fade{transition:opacity .8s linear}.xterm .xterm-scrollable-element>.xterm-shadow{position:absolute;display:none}.xterm .xterm-scrollable-element>.xterm-shadow.xterm-shadow-top{display:block;top:0;left:3px;height:3px;width:100%;box-shadow:var(--vscode-scrollbar-shadow,#000) 0 6px 6px -6px inset}.xterm .xterm-scrollable-element>.xterm-shadow.xterm-shadow-left{display:block;top:3px;left:0;height:100%;width:3px;box-shadow:var(--vscode-scrollbar-shadow,#000) 6px 0 6px -6px inset}.xterm .xterm-scrollable-element>.xterm-shadow.xterm-shadow-top-left-corner{display:block;top:0;left:0;height:3px;width:3px}.xterm .xterm-scrollable-element>.xterm-shadow.xterm-shadow-top.xterm-shadow-left{box-shadow:var(--vscode-scrollbar-shadow,#000) 6px 0 6px -6px inset}`
+
+// Why: older Android-compatible WebViews, including HarmonyOS 2's Chromium 92,
+// lack structuredClone while xterm 6 needs it to construct terminal modes.
+const STRUCTURED_CLONE_POLYFILL_SCRIPT = `<script>if(typeof globalThis.structuredClone!=='function'){globalThis.structuredClone=function structuredClone(value){if(value==null||typeof value!=='object')return value;if(Array.isArray(value))return value.map(function(item){return globalThis.structuredClone(item)});var output={};for(var key in value){if(Object.prototype.hasOwnProperty.call(value,key)){output[key]=globalThis.structuredClone(value[key])}}return output}}</script>`
+
+const XTERM_WEBGL_SCRIPT =
+  '<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.20.0-beta.284/lib/addon-webgl.js" onerror="window.__orcaXtermLoadError=&quot;@xterm/addon-webgl failed to load&quot;"></script>'
+
+function xtermAddonScripts(enableWebgl: boolean): string {
+  return `<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.1.0-beta.285/lib/xterm.min.js" onerror="window.__orcaXtermLoadError=&quot;@xterm/xterm failed to load&quot;"></script><script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.10.0-beta.285/lib/addon-unicode11.js" onerror="window.__orcaXtermLoadError=&quot;@xterm/addon-unicode11 failed to load&quot;"></script>${enableWebgl ? XTERM_WEBGL_SCRIPT : ''}`
+}
+
+const LOAD_WEBGL_ADDON_JS = `
+    if (window.WebglAddon && window.WebglAddon.WebglAddon) {
+      try { var webglAddon = new window.WebglAddon.WebglAddon(); term.loadAddon(webglAddon); if (webglAddon.onContextLoss) webglAddon.onContextLoss(function() { try { webglAddon && webglAddon.dispose && webglAddon.dispose(); } catch (e) {} }); } catch (e) {}
+    }`
+
+type XtermHtmlOptions = {
+  enableWebgl: boolean
+}
+
 // Why: TUI apps (Claude Code / Ink) emit escape codes with absolute cursor
 // positioning designed for the desktop's terminal dimensions (~150+ cols).
 // We initialize xterm at the desktop's exact cols/rows so those escape codes
@@ -42,12 +64,13 @@ const DEFAULT_TERMINAL_THEME: RuntimeMobileTerminalTheme['theme'] = {
 // any terminal column count (80, 150, 200+). All touch gestures (scroll,
 // pinch-to-zoom, pan) are handled by custom JS rather than native WebView
 // behavior, so they work correctly with the CSS scale transform.
-export const XTERM_HTML = `<!DOCTYPE html>
+export function createXtermHtml({ enableWebgl }: XtermHtmlOptions): string {
+  return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.1.0-beta.285/css/xterm.min.css">
+<style>${XTERM_CSS}</style>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -192,7 +215,8 @@ export const XTERM_HTML = `<!DOCTYPE html>
     <button id="sel-menu-all">Select All</button>
   </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.1.0-beta.285/lib/xterm.min.js"></script><script src="https://cdn.jsdelivr.net/npm/@xterm/addon-unicode11@0.10.0-beta.285/lib/addon-unicode11.js"></script><script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.20.0-beta.284/lib/addon-webgl.js"></script>
+${STRUCTURED_CLONE_POLYFILL_SCRIPT}
+${xtermAddonScripts(enableWebgl)}
 <script>
 (function() {
   var surface = document.getElementById('terminal-surface');
@@ -729,9 +753,7 @@ export const XTERM_HTML = `<!DOCTYPE html>
       allowProposedApi: true
     });
     term.open(surface);
-    if (window.WebglAddon && window.WebglAddon.WebglAddon) {
-      try { var webglAddon = new window.WebglAddon.WebglAddon(); term.loadAddon(webglAddon); if (webglAddon.onContextLoss) webglAddon.onContextLoss(function() { try { webglAddon && webglAddon.dispose && webglAddon.dispose(); } catch (e) {} }); } catch (e) {}
-    }
+${enableWebgl ? LOAD_WEBGL_ADDON_JS : ''}
     if (window.Unicode11Addon && window.Unicode11Addon.Unicode11Addon) try { term.loadAddon(new window.Unicode11Addon.Unicode11Addon()); term.unicode.activeVersion = '11'; } catch (e) {}
     if (typeof replayData === 'string' && replayData.length > 0) {
       enqueueWrite(replayData);
@@ -804,6 +826,49 @@ export const XTERM_HTML = `<!DOCTYPE html>
     }
   }
 
+  function notifyError(stage, error) {
+    var message = stage;
+    if (error) {
+      if (typeof error.message === 'string' && error.message.length > 0) {
+        message += ': ' + error.message;
+      } else {
+        message += ': ' + String(error);
+      }
+    }
+    notify({ type: 'error', message: message });
+  }
+
+  function handleRawMessage(rawData) {
+    try {
+      handleMsg(typeof rawData === 'string' ? JSON.parse(rawData) : rawData);
+    } catch (error) {
+      notifyError('terminal message failed', error);
+    }
+  }
+
+  function notifyPaintHealth(stage) {
+    if (!term || !term.element) return;
+    requestAnimationFrame(function() {
+      if (!term || !term.element) return;
+      var screen = term.element.querySelector('.xterm-screen');
+      var canvas = term.element.querySelector('canvas');
+      notify({
+        type: 'paint-health',
+        stage: stage,
+        cols: term.cols || 0,
+        rows: term.rows || 0,
+        cellWidth: getCellWidth(),
+        cellHeight: getCellHeight(),
+        scrollWidth: term.element.scrollWidth || 0,
+        scrollHeight: term.element.scrollHeight || 0,
+        screenWidth: screen ? screen.clientWidth : 0,
+        screenHeight: screen ? screen.clientHeight : 0,
+        hasCanvas: !!canvas,
+        scale: getTotalScale()
+      });
+    });
+  }
+
   function measureFitDimensions(containerHeightPx, retriesLeft) {
     if (typeof retriesLeft !== 'number') retriesLeft = 30;
     // Why: init and measure are posted back-to-back from React, but
@@ -868,6 +933,9 @@ export const XTERM_HTML = `<!DOCTYPE html>
   }
 
   function handleMsg(msg) {
+    if (!msg || typeof msg !== 'object') {
+      return;
+    }
     if (typeof msg.id === 'number') {
       if (handledMessageIds.indexOf(msg.id) !== -1) return;
       handledMessageIds.push(msg.id);
@@ -875,6 +943,7 @@ export const XTERM_HTML = `<!DOCTYPE html>
     }
     if (msg.type === 'init') {
       init(msg.cols, msg.rows, msg.initialData, msg.terminalTheme, msg.fontScale, msg.preserveScroll, msg.oscLinks);
+      notifyPaintHealth('after-init-message');
     } else if (msg.type === 'set-font-scale') {
       // Why: ignore RN echoing back the value a pinch just set (msg.fontScale ===
       // currentTextScale) so the post-pinch state isn't reset; only apply changes.
@@ -1802,15 +1871,11 @@ export const XTERM_HTML = `<!DOCTYPE html>
   attachSurfaceEventHandlers(surface);
 
   window.addEventListener('message', function(e) {
-    try {
-      handleMsg(typeof e.data === 'string' ? JSON.parse(e.data) : e.data);
-    } catch(ex) {}
+    handleRawMessage(e.data);
   });
 
   document.addEventListener('message', function(e) {
-    try {
-      handleMsg(typeof e.data === 'string' ? JSON.parse(e.data) : e.data);
-    } catch(ex) {}
+    handleRawMessage(e.data);
   });
 
   window.addEventListener('resize', function() {
@@ -1828,9 +1893,13 @@ export const XTERM_HTML = `<!DOCTYPE html>
   if (window.Terminal) {
     notify({ type: 'web-ready' });
   } else {
-    notify({ type: 'error', message: 'xterm failed to load' });
+    notify({ type: 'error', message: window.__orcaXtermLoadError || 'xterm failed to load' });
   }
 })();
 </script>
 </body>
 </html>`
+}
+
+export const XTERM_HTML = createXtermHtml({ enableWebgl: true })
+export const XTERM_HTML_ANDROID = createXtermHtml({ enableWebgl: false })
